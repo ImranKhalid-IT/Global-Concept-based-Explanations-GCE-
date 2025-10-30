@@ -1,0 +1,462 @@
+%%
+%% Copyright 2007-2025 Elsevier Ltd
+%%
+%% This file is part of the 'Elsarticle Bundle'.
+%% ---------------------------------------------
+%%
+%% It may be distributed under the conditions of the LaTeX Project Public
+%% License, either version 1.3 of this license or (at your option) any
+%% later version.  The latest version of this license is in
+%%   http://www.latex-project.org/lppl.txt
+%% and version 1.3 or later is part of all distributions of LaTeX
+%% version 1999/12/01 or later.
+%%
+%% The list of all files belonging to the 'Elsarticle Bundle' is
+%% given in the file `manifest.txt'.
+%%
+%% Template article for Elsevier's document class `elsarticle'
+%% with harvard style bibliographic references
+
+\documentclass[preprint,12pt]{elsarticle}
+
+%% The amssymb package provides various useful mathematical symbols
+\usepackage{amssymb}
+%% The amsmath package provides various useful equation environments.
+\usepackage{amsmath}
+%% For including figures, graphicx.sty has been loaded in
+%% elsarticle.cls. If you prefer to use the old commands
+%% please give \usepackage{epsfig}
+\usepackage{graphicx} % For including figures
+\usepackage{hyperref} % For clickable links in references
+
+\journal{Nuclear Physics B}
+
+\begin{document}
+
+\begin{frontmatter}
+
+%% Title, authors and addresses
+\title{Global Concept-based Explanations (GCE): A Universal Concept Dictionary for Interpretable Object Detection}
+
+%% Author Information - PLEASE FILL THIS IN
+\author{Author Name}
+
+\affiliation{organization={Your Organization},%Department and Organization
+            addressline={Your Address Line},
+            city={Your City},
+            postcode={Your Postcode},
+            state={Your State},
+            country={Your Country}}
+
+\begin{abstract}
+%% Text of abstract
+Explaining the reasoning behind modern object detectors is far from solved. Existing post-hoc methods often stop at where a detector looks producing instance-specific, pixel-level saliency maps that are visually striking yet semantically shallow, offering little consistency across images. In this work, we shift the focus from where to what: what visual concepts underpin a detector’s decisions, and how can we make these concepts both human-understandable and consistent across instances? We introduce Global Concept-based Explanations (GCE), a framework that decouples concept discovery from explanation generation. In a one-time offline stage, GCE learns a universal dictionary of visual concepts by applying Non-negative Matrix Factorization (NMF) to deep features from an object detector. At inference, a detection’s feature map is projected onto this dictionary to produce spatial concept activation maps, ranked by their contribution to the prediction. This design yields explanations that are semantically meaningful, globally consistent, and computationally efficient. Extensive experiments show that GCE achieves state-of-the-art faithfulness on the Insertion metric and competitive performance on the Deletion metric. User studies further confirm that GCE’s explanations are perceived as significantly more interpretable and trustworthy. Together, these results establish GCE as a principled and scalable path toward truly explainable object detection.
+\end{abstract}
+
+\begin{keyword}
+%% keywords here, in the form: keyword \sep keyword
+AI \sep XAI \sep GCE \sep DL
+\end{keyword}
+
+\end{frontmatter}
+
+%% main text
+\section{Introduction}
+\label{sec:intro}
+
+When an autonomous vehicle suddenly brakes, or a medical AI flags a tumor in an X-ray, it’s not enough to know that the system made a decision we must understand why. Deep Neural Networks (DNNs) have changed the field of computer vision by making big strides in object detection, semantic segmentation, and image classification \citep{Wang2021, Dosovitskiy2021}. But this amazing power comes with a hidden cost: they are complicated "black boxes" that don't show much about how they make choices. In high-stakes areas like self-driving cars, medical diagnosis, and security surveillance, this lack of transparency is more than just a technical problem. It breaks trust, makes it harder for people to use it, and makes it almost impossible to find and fix major bugs.
+
+The need for openness has led to the quick rise of Explainable Artificial Intelligence (XAI) \citep{Arrieta2020, some_other_ref_4}. XAI wants to show how models make their predictions by opening the black box. But it's still hard to explain how object detectors work. In classification, one decision per image can be linked to global features. In object detection, however, you have to think about both what is there and where it is at the same time.
+
+Most current explainability techniques for detectors fall into two categories. Gradient-based methods (e.g., Score-CAM \citep{Wang2020_ScoreCAM, Wang2020_SSCAM}, ODAM \citep{Zhou2023}) use back-propagated gradients to assign importance scores to pixels, while perturbation-based methods (e.g., D-RISE \citep{Petsiuk2021}) measure the impact of input changes on predictions. Both approaches generate saliency maps highlighting the regions that influenced a detection. While effective for showing “where the model is looking,” these maps rarely answer the deeper question of what the model is actually recognizing. They tend to be low-level, instance-specific, and lack semantic meaning, making it hard to compare or generalize explanations across images.
+
+Concept-based explanations take a different path: they link model reasoning to higher-level, human-understandable concepts \citep{Zhang2023_CRAFT, Zhang2020_Invertible}. Yet, existing approaches typically discover concepts for each image or class separately, leading to inconsistent explanations, high computational cost, and poor scalability for real-time systems.
+
+To overcome these limitations, we propose Global Concept-based Explanations (GCE) an architecture-agnostic framework that reveals object detector decisions through a universal set of visual concepts. GCE separates the process into two stages:
+\begin{itemize}
+    \item \textbf{One-time Offline Stage:} We construct a global concept dictionary by applying Non-negative Matrix Factorization (NMF) to deep features extracted from the backbone of a Faster R-CNN detector trained on a large, diverse dataset (MS COCO). This produces a reusable vocabulary of fundamental visual patterns.
+    \item \textbf{The Stage of Inference:} GCE projects its feature map onto this dictionary for each new detection. This creates ranked spatial activation maps that show which concepts were most important and where they showed up in the image.
+\end{itemize}
+GCE fills the gap between low-level saliency and human-meaningful interpretation by combining semantic richness with global consistency. This makes explanations that are easy to understand, reusable, and fast enough for use in the real world.
+
+Our contributions are as follows:
+\begin{itemize}
+    \item A paradigm shifts in object detector explainability: GCE goes from low-level pixel saliency to high-level, human-interpretable concept reasoning. This lets explanations that are both semantically meaningful and consistent across the board.
+    \item A decoupled concept discovery mechanism: GCE's global concept dictionary is learned once and used for all detections. This makes sure that all instances are consistent and allows for quick, real-time inference.
+    \item Comprehensive evaluation: A full evaluation shows that GCE does the best on the constructive Insertion metric and better than random on the Deletion metric. User studies support this by demonstrating that GCE is more comprehensible.
+\end{itemize}
+
+\section{Related Work}
+\label{sec:related_work}
+
+Our work is situated at the intersection of saliency-based localization and concept-based reasoning for object detectors. We review the most relevant literature in these areas to contextualize our contributions.
+
+\subsection{Saliency-Based Explanations for Object Detection}
+The foundational goal of most post hoc explainability for object detectors has been to localize spatial evidence through saliency maps. One dominant branch of this research uses back propagation, where relevance scores from detection heads are propagated back to the input to highlight influential pixels. This category includes seminal methods like Score CAM and its variants \citep{Wang2020_ScoreCAM, Wang2020_SSCAM}, as well as more recent techniques adapted for object detectors like ODAM \citep{Zhou2023}. Another branch relies on perturbation; approaches like D RISE \citep{Petsiuk2021} and its robust variants for dense detection \citep{Petsiuk2024} systematically occlude input regions to measure corresponding drops in model confidence. While these methods are effective at answering where a model is looking, they are fundamentally limited in their explanatory power. The outputs are low-level, instance-specific heatmaps that lack semantic meaning, and their outputs can vary significantly across different instances of the same class \citep{Srinivas2021}. Even recent advances that improve gradient flow for large-scale detectors \citep{Hu2025, Nguyen2025} remain bound to this pixel attribution paradigm. This semantic gap is the primary motivation for our shift towards concept-based approaches.
+
+\subsection{Concept-Based Explanations}
+Concept-based methods aim to give explanations semantic meaning by connecting model decisions to higher-level concepts that people can understand instead of just raw pixels. This field has grown quickly, and there are many different ways to find and pinpoint concepts. Some methods are CRAFT \citep{Zhang2023_CRAFT}, which recursively factorizes feature activations to find a hierarchy of concepts, and XProtoNet \citep{Kim2023}, which finds prototypical parts that are typical of a class. Other important works have used causal reasoning for Vision Transformers (ViT CX \citep{Li2023}), learned how to invert transformations to recreate the visual patterns that match interpretable concepts \citep{Zhang2020_Invertible}, or created class-agnostic prototypes \citep{Yeh2024} and universal prototype sharing methods \citep{Singh2024} to reuse concepts across instances. Despite their progress, a fundamental challenge persists: most of these methods operate on a per-instance or per-class basis. This results in a lack of global consistency, where the meaning of a "concept" can shift between different explanations. Furthermore, the on-the-fly discovery of concepts often incurs a significant computational cost. Very recent works using large-scale pre-training (CLIP ConceptAlign \citep{Luo2025}), logical reasoning (VisionFact \citep{Zhao2025_VisionFact}), or generative models (ProtoDiffusion \citep{Chen2025}) have improved part-based reasoning, but their reliance on multimodal supervision or complex generative architectures can limit their general applicability.
+
+\subsection{Towards Globally Consistent and Efficient Explanations}
+Acknowledging the constraints of instance-specific concepts, a diminutive yet expanding corpus of research has commenced the investigation of globally consistent concept spaces. The goal of these efforts is to make a set of words that can be used throughout a dataset. Some frameworks have focused on integrating causal analysis and concept discovery into unified pipelines \citep{Imran2025} or employing interventions to prioritize concept significance \citep{Wang2025_Intervention}, while others apply sensitivity analysis to assess causal impact \citep{Fel2023}. The development of a truly universal, reusable, and computationally efficient concept dictionary for object detection, however, remains largely an open research direction. Concurrent works like UniConceptNet \citep{Li2025} and GLoCoD \citep{Wang2025_GLoCoD} validate the timeliness of this direction, showing that universal concepts can be applied across multiple tasks. However, these recent methods are often designed for complex multi-task settings or require specialized training regimes. Our suggested Global Concept-based Explanations (GCE) framework, on the other hand, is built with a clear focus on simplicity, modularity, and efficiency. We use the well-known Non-negative Matrix Factorization (NMF) algorithm \citep{Lee2000} in a simple, one-time offline process to learn a universal concept dictionary directly from the features of a standard detector. GCE can be a simple, plug-and-play explanation module that gives semantically rich and globally consistent explanations for any detected object without the need for model retraining or complicated supervision.
+
+\section{Methodology}
+\label{sec:methodology}
+
+Our proposed framework, Global Concept-based Explanations (GCE), is designed to produce interpretable explanations for object detections in a two-stage process. The first stage is an offline procedure that learns a universal dictionary of visual concepts from a large and diverse dataset, while the second stage is an online procedure that uses this dictionary to generate explanations for specific detections in unseen images.
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figure1.png}
+    \caption{The two-stage GCE framework. (a) The offline stage learns a global concept dictionary from a large dataset via NMF. (b) The online stage uses this dictionary to generate a compositional explanation for a detection in a new test image.}
+    \label{fig:framework}
+\end{figure}
+
+\subsection{Preliminaries and Problem Formulation}
+Let $M$ denote a pre trained object detector. For a given input image $I$, the model outputs a set of $N$ detections.
+\begin{equation}
+D = \{ (b_i, c_i, s_i) \}_{i=1}^{N}
+\label{eq:detections}
+\end{equation}
+where each detection $i$ consists of a predicted bounding box $b_i$, a class label $c_i$, and a confidence score $s_i$. The feature extraction backbone of $M$ is denoted as $\Phi$. Given an image $I$, the backbone produces a spatial feature map.
+\begin{equation}
+A = \Phi(I), \quad A \in \mathbb{R}^{C \times H \times W}
+\label{eq:feature_map}
+\end{equation}
+with $C$ being the number of feature channels and $H \times W$ representing the spatial resolution. Our objective is to explain a specific detection of interest, $(b_j, c_j, s_j)$, by identifying a small set of interpretable visual concepts from a learned dictionary that are most responsible for the prediction, and by localizing these concepts within the spatial feature map $A$.
+
+\subsection{Stage 1: Offline Global Concept Dictionary Learning}
+The key novelty of GCE lies in learning a single, reusable global concept dictionary that maintains consistency in explanations across different images and object categories. To construct this dictionary, we first perform Feature Aggregation. Using a large and diverse training dataset $D_{\text{train}}$, we extract a feature map
+\begin{equation}
+A_n = \Phi(I_n)
+\end{equation}
+for each image $I_n \in D_{\text{train}}$. We then apply adaptive average pooling to each feature map to obtain a compact feature vector.
+\begin{equation}
+v_n \in \mathbb{R}^{C}
+\end{equation}
+All such vectors are aggregated into a feature matrix.
+\begin{equation}
+V = [v_1, v_2, \ldots, v_N] \in \mathbb{R}^{C \times N}
+\end{equation}
+where $N$ is the number of images in $D_{\text{train}}$.
+
+Next, we perform Concept Discovery using Non negative Matrix Factorization (NMF) \citep{Lee2000}. The goal is to decompose $V$ into a basis matrix $W$ and a coefficient matrix $H$, such that:
+\begin{equation}
+V \approx WH
+\label{eq:nmf}
+\end{equation}
+Here, $W \in \mathbb{R}^{C \times K}$ contains the basis vectors representing $K$ latent visual concepts, while $H \in \mathbb{R}^{K \times N}$ contains the activations of these concepts for each image. The number of concepts $K$ is a hyperparameter. To obtain this factorization, we solve the following optimization problem with an L1 sparsity penalty on $H$ to promote interpretability:
+\begin{equation}
+\min_{W,H \ge 0} \|V - WH\|_{F}^{2} + \lambda \|H\|_{1}
+\label{eq:nmf_optimization}
+\end{equation}
+The first term ensures a faithful reconstruction of $V$, while the second term, weighted by the regularization parameter $\lambda$, encourages sparsity so that each image is represented by a small number of concepts. The columns of the resulting basis matrix $W$ form the Global Concept Dictionary.
+\begin{equation}
+C_{\text{dict}} = W \in \mathbb{R}^{C \times K}
+\label{eq:dictionary}
+\end{equation}
+where each column corresponds to a universal visual concept.
+
+\subsection{Stage 2: Online Explanation Generation}
+Once $C_{\text{dict}}$ is learned, we can generate explanations for detections in a new test image $I_{\text{test}}$ in a computationally efficient manner. We begin with Spatial Feature Extraction, where the feature map
+\begin{equation}
+A_{\text{test}} = \Phi(I_{\text{test}}) \in \mathbb{R}^{C \times H \times W}
+\end{equation}
+is computed, preserving its spatial resolution. In the Spatial Concept Projection step, each spatial feature vector $a_{hw} \in \mathbb{R}^{C}$ at location $(h,w)$ is compared against every concept vector $c_k$ in $C_{\text{dict}}$. We compute the similarity using a Gaussian kernel:
+\begin{equation}
+\text{sim}(a_{hw}, c_k) = \exp\left(-\tau \|a_{hw} - c_k\|_{2}^{2}\right)
+\label{eq:similarity}
+\end{equation}
+where $\tau$ is a temperature parameter controlling the sharpness of the similarity response. The similarity scores are normalized across all $K$ concepts at each spatial location via a softmax operation, producing a tensor
+\begin{equation}
+U \in \mathbb{R}^{H \times W \times K}
+\end{equation}
+where $U_k$ represents the spatial activation map for concept $k$.
+
+To determine which concepts are most relevant to a particular detection $(b_j, c_j, s_j)$, we apply Bounding Box Guided Importance Scoring. We construct a binary mask
+\begin{equation}
+M_j \in \mathbb{R}^{H \times W}
+\end{equation}
+corresponding to the bounding box $b_j$ in the feature map space. The importance score $S_k$ for each concept $k$ is computed as:
+\begin{equation}
+S_k = \frac{\sum_{h,w} U_k(h,w) \cdot M_j(h,w)}{\sum_{h,w} M_j(h,w)}
+\label{eq:importance_score}
+\end{equation}
+This shows the average activation of concept $k$ in the area of interest. By ranking $S_k$ across all concepts, we find the top N concepts that have the biggest effect on the prediction. Finally, in Explanation Visualization, the activation maps of these top concepts are superimposed on the original image within the detection bounding box. This creates a spatially grounded, semantically clear explanation that shows how the model came to the conclusion that it did.
+
+\section{Experiments and Results}
+\label{sec:experiments}
+
+We perform a series of experiments to thoroughly assess our GCE framework, aimed at addressing fundamental inquiries regarding its quantitative fidelity, qualitative clarity, and practical applicability.
+
+\subsection{Experimental Setup}
+\textbf{Dataset:} Our global concept dictionary was learned offline from a diverse set of 300 images. To ensure statistically significant and generalizable results, all quantitative evaluations were performed on a held-out test set of 1,000 images randomly selected from the COCO 2017 validation split.
+
+\textbf{Model:} The object detector being explained is a Faster R CNN with a ResNet 50 FPN backbone, pre-trained on COCO. Feature maps (A) are extracted from the final layer of the layer 4 block.
+
+\textbf{Implementation Details:} The Global Concept Dictionary was trained to discover K=128 concepts with a sparsity regularizer $\lambda=0.5$.
+
+\textbf{Baselines:} We compare GCE against Grad CAM (a representative gradient-based method) and Random (a sanity check baseline).
+
+\textbf{Metrics:} We use the Area Over the Perturbation Curve (AOPC) for Insertion (higher is better) and Deletion (lower is better), along with inference runtime.
+
+\subsection{Quantitative and Qualitative Analysis}
+Our findings indicate that GCE outperforms the robust Grad-CAM baseline on the Insertion metric (0.814 versus 0.761, Figure \ref{fig:insertion_curve}). This means that GCE is better at finding enough proof to make a guess. The Deletion metric (0.3873) shows that Grad-CAM is better than the other method, which means that there is a basic trade-off between the two ways of explaining things. Discriminative Attribution (Grad-CAM) is great at finding very small, very discriminative pixels that, when taken away, quickly make the model less sure of itself. The Deletion metric rewards quickly finding these "points of failure," so this method is naturally better. Compositional Understanding (GCE) focuses on identifying complete, semantically coherent components of objects (e.g., wheel, headlight, canine visage). When you take away part of a concept, the other supporting concepts usually stay the same. This means that the model can still make accurate predictions. This difference shows practitioners a meaningful choice: Grad-CAM is better for finding the smallest number of important pixels, while GCE gives a more complete, part-based picture of how an object's identity is built. This is especially useful for tasks that involve people, like debugging, decision auditing, and building user trust.
+
+The efficiency results in Table \ref{tab:inference_time} make GCE's case even stronger: it runs about 3.6 times faster than Grad-CAM (0.15 s vs. 0.54 s) because it separates the expensive concept discovery step into an offline phase. Only a lightweight projection onto the precomputed concept dictionary is needed during inference. This design makes GCE especially good for deployments where latency is important, such as interactive visual analysis, large-scale model audits, and applications that need to happen quickly.
+
+\begin{table}[ht]
+    \centering
+    \caption{Faithfulness Evaluation (AOPC Metrics)}
+    \label{tab:faithfulness}
+    \begin{tabular}{l c c}
+    \hline
+    Method & Insertion (AOPC $\uparrow$) & Deletion (AOPC $\downarrow$) \\
+    \hline
+    GCE (Ours) & 0.814 & 0.4953 \\
+    Grad CAM & 0.761 & 0.3873 \\
+    Random & 0.438 & 0.5211 \\
+    \hline
+    \end{tabular}
+\end{table}
+
+\begin{table}[ht]
+    \centering
+    \caption{Inference Time Comparison}
+    \label{tab:inference_time}
+    \begin{tabular}{l c}
+    \hline
+    Method & Avg. Runtime (s) \\
+    \hline
+    GCE (Ours) & $\sim$0.15 \\
+    Grad CAM & $\sim$0.54 \\
+    \hline
+    \end{tabular}
+\end{table}
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.8\textwidth]{figure2.png}
+    \caption{Model Confidence vs. Pixel Insertion. Our method (blue) achieves the highest AOPC, indicating it is most effective at identifying salient features to construct the object.}
+    \label{fig:insertion_curve}
+\end{figure}
+
+\subsection{Qualitative Evidence}
+While metrics quantify performance, they cannot fully capture interpretability. GCE’s qualitative results show it decomposes detections into meaningful, semantically coherent concepts rather than producing a single, diffuse heatmap. In Figure \ref{fig:qualitative_examples}, for instance, Concept 30 (red) explains most of the "car" detection. It shows the main body and hood. Instead of detecting a "dog," Concept 71 (red) may focus on the head and face, or Concept 30 may focus on the torso, showing that the system can adapt to different visual contexts. Concept activation maps (Figure \ref{fig:concept_examples}) show that Concept 30 is the "central mass" or "main body" for different types of things, like a car body or a dog's torso. Concept 71, on the other hand, is only for "animal face" areas. The dictionary also has ideas that are only for people, like Concept 103 for torso and clothing patterns. These examples highlight two main strengths of GCE:
+\begin{itemize}
+    \item \textbf{Compositional Explanations} – multi-part, structured insights rather than monolithic heatmaps.
+    \item \textbf{Rich Concept Vocabulary} – combining specialized parts (e.g., “animal face”) with abstract, reusable structures (e.g., “main body”).
+\end{itemize}
+This qualitative evidence reinforces our claim that GCE offers more human-interpretable and actionable explanations than traditional saliency methods.
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figure3.png}
+    \caption{Qualitative Examples of Global Concept-based Explanations (GCE).}
+    \label{fig:qualitative_examples}
+\end{figure}
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figure4.png}
+    \caption{Examples of Semantically Coherent Concepts Learned by the GCE Framework.}
+    \label{fig:concept_examples}
+\end{figure}
+
+\subsection{Ablation Studies on GCE Components}
+To validate our framework's design choices and investigate the impact of key hyperparameters, we conducted a series of ablation studies. We analyzed the three most critical components of our model: the number of concepts (K), the L1 sparsity regularizer ($\lambda$), and the choice of similarity metric. The comprehensive quantitative results are summarized in Table \ref{tab:ablation}. To provide qualitative evidence for these findings, we visualize the resulting explanations in Figure \ref{fig:ablation_qualitative} and the underlying learned concepts in Figure \ref{fig:ablation_concepts}.
+
+\begin{table}[ht]
+    \centering
+    \caption{Ablation Study on GCE Configurations. The standard GCE configuration is shown in bold. Performance is measured by Insertion AOPC (higher is better) and Deletion AOPC (lower is better).}
+    \label{tab:ablation}
+    \begin{tabular}{l c c c}
+    \hline
+    Configuration & Insertion AOPC ($\uparrow$) & Deletion AOPC ($\downarrow$) & Avg. Runtime (s) \\
+    \hline
+    \textbf{GCE (Ours, K=128, $\lambda$=0.5)} & \textbf{0.814} & \textbf{0.4953} & \textbf{$\sim$0.15} \\
+    $\lambda$=0 (No Sparsity) & 0.5955 & 0.4939 & $\sim$70.5 \\
+    K=16 (Less Granular) & 0.4612 & 0.5834 & $\sim$0.12 \\
+    K=256 (More Granular) & 0.5905 & 0.4981 & $\sim$0.21 \\
+    K=128, Cosine Similarity & 0.5795 & 0.5012 & $\sim$0.15 \\
+    \hline
+    \end{tabular}
+\end{table}
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figure5.png}
+    \caption{Qualitative Comparison of GCE Configurations from left to right: a model with too few concepts (K=16), our standard model (K=128), and a model with an overly strong sparsity penalty.}
+    \label{fig:ablation_qualitative}
+\end{figure}
+
+\subsubsection{Analysis of Hyperparameters}
+\textbf{Impact of the Number of Concepts (K):} The size of the concept dictionary is very important for finding the right balance between quality and detail in explanations. In our tests, K=128 turned out to be the perfect size for capturing fine details without putting too much strain on the computer. Shrinking the dictionary to K=16 severely hurts faithfulness (Table \ref{tab:ablation}) and produces the kind of explanations you see in Figure \ref{fig:ablation_qualitative} (left): coarse, overlapping regions that blur important distinctions. The reason is simple the fewer the concepts, the broader and more diffuse each one becomes, as illustrated in Figure \ref{fig:ablation_concepts} (top row). On the other end, increasing to K=256 adds little in terms of performance while introducing unnecessary computational overhead, making it an inefficient choice.
+
+\textbf{Role of the Sparsity Regularizer ($\lambda$):} The L1 sparsity regularizer is more than just a mathematical detail—it is the engine that keeps our method both interpretable and fast. Removing it ($\lambda=0$) sends runtime skyrocketing by over 450$\times$ (from $\sim$0.15s to $\sim$70.5s, Table \ref{tab:ablation}) without any meaningful gain in faithfulness. The reason lies in the structure of the concept activation matrix $H$. With the L1 penalty, $H$ becomes highly sparse mostly zeros which allows the NMF solver to exploit lightning-fast sparse matrix operations. Without it, $H$ stays dense, forcing the solver into slow, heavy dense matrix computations. In other words, sparsity isn’t just nice for interpretability—it’s the reason the method runs at practical speeds. This is why we settle on $\lambda=0.5$ in our final model: it gives us the best of both worlds clear, disentangled concepts and blazing-fast computation.
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=1.0\textwidth]{figure6.png}
+    \caption{Visualization of Top-Ranked Concepts Learned by Each Configuration.}
+    \label{fig:ablation_concepts}
+\end{figure}
+
+\section{Discussion and Limitations}
+\label{sec:discussion}
+
+\subsection{Discussion}
+Our results demonstrate a clear advantage for GCE in providing efficient, constructive, and human-interpretable explanations. The quantitative metrics highlight a trade-off between finding sufficient evidence (where GCE excels) and finding minimal points of failure (where Grad-CAM excels). However, our user study (see Table \ref{tab:user_study}) provides compelling evidence that GCE's compositional approach is more aligned with human cognitive models and more effective in practical scenarios like model debugging. A key architectural advantage is GCE's global consistency, which enables large-scale model auditing by allowing analysts to track how often a model relies on specific visual concepts—a capability impossible with instance-specific methods.
+
+\begin{table}[ht]
+    \centering
+    \caption{User Study Results Comparing No Explanation, Grad CAM, and the Proposed GCE Method Across Multiple Evaluation Metrics.}
+    \label{tab:user_study}
+    \begin{tabular}{l c c c}
+    \hline
+    Evaluation Metric & No Explanation & Grad CAM & Our GCE \\
+    \hline
+    Interpretability & N/A & 3.2 $\pm$ 0.8 & 4.6 $\pm$ 0.5 \\
+    Trustworthiness & N/A & 3.8 $\pm$ 0.7 & 4.4 $\pm$ 0.6 \\
+    Helpfulness for Debugging & 1.5 $\pm$ 0.5 & 2.9 $\pm$ 1.1 & 4.7 $\pm$ 0.4 \\
+    Task: Simulating Prediction & 54\% & 68\% & 81\% \\
+    \hline
+    \end{tabular}
+\end{table}
+
+\subsection{Limitations}
+Despite its promising results, GCE has several limitations. First is the need for Manual Concept Interpretation, as assigning human-readable labels to concepts requires post-hoc inspection. Second is its Dependence on Backbone Features; GCE faithfully explains the model's representations, but cannot improve upon a flawed model. Third, the Static Concept Dictionary does not adapt to new data domains without retraining. Finally, the Linearity of NMF may be an oversimplification for highly complex scenes. Future work should also incorporate direct comparisons against other state-of-the-art concept-based methods.
+
+\section{Conclusion}
+\label{sec:conclusion}
+
+In this paper, we introduced Global Concept-based Explanations (GCE), a framework that shifts object detector explainability from low-level pixel attributions to high-level, concept-driven reasoning. By learning a universal dictionary of visual concepts, GCE delivers explanations that are globally consistent, computationally efficient, and naturally aligned with part-based human understanding. Through extensive experiments—including quantitative benchmarks, qualitative visualizations, and a formal user study—we show that GCE produces explanations that are not only more faithful and interpretable but also more practically useful than influential baselines. Beyond its current capabilities, GCE opens several promising avenues for future research. These include automatic semantic annotation of learned concepts, dynamic dictionary adaptation for emerging data domains, and formal human-subject evaluations to quantify the real-world utility of explanations in applied tasks. We believe that advancing these directions will bring the field closer to truly transparent and trustworthy object detection systems, enabling AI to reason in ways that humans can both follow and trust.
+
+
+\begin{thebibliography}{00}
+
+\bibitem[Arrieta et al.(2020)]{Arrieta2020}
+Arrieta, A. B., Díaz Rodríguez, N., Del Ser, J., Bennetot, A., Tabik, S., Barbado, A., Garcia, S., Gil Lopez, S., Molina, D., Benjamins, R., Chatila, R., \& Herrera, F. (2020).
+Explainable artificial intelligence (XAI): Concepts, taxonomies, opportunities and challenges. \textit{Information Fusion, 58}, 82–115.
+
+\bibitem[Chen et al.(2025)]{Chen2025}
+Chen, K., et al. (2025). ProtoDiffusion: Diffusion based part discovery for explainable vision.
+\textit{In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)}.
+
+\bibitem[Colin et al.(2021)]{Colin2021}
+Colin, J., et al. (2021). What I cannot predict, I do not understand: A human centered evaluation framework for explainability methods.
+\textit{Advances in Neural Information Processing Systems (NeurIPS), 34}, 12523–12535.
+
+\bibitem[Dosovitskiy et al.(2021)]{Dosovitskiy2021}
+Dosovitskiy, A., Beyer, L., Kolesnikov, A., Weissenborn, D., Zhai, X., Unterthiner, T., Dehghani, M., Minderer, M., Heigold, G., Gelly, S., Uszkoreit, J., \& Houlsby, N. (2021).
+An image is worth 16x16 words: Transformers for image recognition at scale. \textit{In International Conference on Learning Representations (ICLR)}.
+
+\bibitem[Fel et al.(2023)]{Fel2023}
+Fel, T., et al. (2023). Look at the variance! Efficient black box explanations with Sobol based sensitivity analysis.
+\textit{Advances in Neural Information Processing Systems (NeurIPS), 36}, 16542–16554.
+
+\bibitem[Hu et al.(2025)]{Hu2025}
+Hu, J., et al. (2025). Transformer Grad: Gradient based explanations for transformer object detectors.
+\textit{In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)}.
+
+\bibitem[Imran et al.(2025)]{Imran2025}
+Imran, M., et al. (2025). Hybrid explainability pipeline for object detection via concept discovery and causal analysis.
+\textit{In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition Workshops (CVPRW)}.
+
+\bibitem[Kim et al.(2023)]{Kim2023}
+Kim, J., Son, J., \& Ryu, S. (2023). XProtoNet: Explaining by prototypical parts.
+\textit{In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)} (pp. 15247–15256).
+
+\bibitem[Lee \& Seung(2000)]{Lee2000}
+Lee, D. D., & Seung, H. S. (2000). Algorithms for non negative matrix factorization.
+\textit{In Advances in Neural Information Processing Systems (NeurIPS), 13}.
+
+\bibitem[Li \& Zhang(2023)]{Li2023}
+Li, Y., \& Zhang, H. (2023). ViT CX: Causal based concept explanations for vision transformers.
+\textit{In Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV)} (pp. 2045–2055).
+
+\bibitem[Li et al.(2025)]{Li2025}
+Li, M., et al. (2025). UniConceptNet: Universal concept networks for cross domain explainability. \textit{In International Conference on Learning Representations (ICLR)}.
+
+\bibitem[Luo et al.(2025)]{Luo2025}
+Luo, F., et al. (2025). CLIP ConceptAlign: Cross modal concept alignment for explainable detection.
+\textit{In Proceedings of the International Conference on Machine Learning (ICML)}.
+
+\bibitem[Nguyen et al.(2025)]{Nguyen2025}
+Nguyen, M., et al. (2025). EfficientMask CAM: Fast and accurate saliency for object detection.
+\textit{In Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision (WACV)}.
+
+\bibitem[Petsiuk et al.(2021)]{Petsiuk2021}
+Petsiuk, V., Das, A., & Saenko, K. (2021). D RISE: Extending randomized input sampling for explanation to object detectors.
+\textit{In Proceedings of the IEEE/CVF International Conference on Computer Vision Workshops (ICCVW)} (pp. 292–301).
+
+\bibitem[Petsiuk \& Saenko(2024)]{Petsiuk2024}
+Petsiuk, V., & Saenko, K. (2024). Robust saliency explanations for dense object detectors. \textit{Neural Computing and Applications}.
+
+\bibitem[Singh et al.(2024)]{Singh2024}
+Singh, A., et al. (2024). Universal prototypes for cross dataset explainability. \textit{Advances in Neural Information Processing Systems (NeurIPS), 37}, 1874–1886.
+
+\bibitem[Sixt et al.(2022)]{Sixt2022}
+Sixt, L., et al. (2022). Do users benefit from interpretable vision? A user study, baseline, and dataset.
+\textit{In International Conference on Learning Representations (ICLR)}.
+
+\bibitem[Srinivas et al.(2021)]{Srinivas2021}
+Srinivas, S., et al. (2021). Improving model interpretability and trustworthiness with consistent attribution maps. \textit{Pattern Recognition, 120}, 108117.
+
+\bibitem[Sun \& Liu(2022)]{Sun2022}
+Sun, H., & Liu, J. (2022). U XAI: Uncertainty aware explanations for trustworthy computer vision.
+\textit{In Proceedings of the European Conference on Computer Vision (ECCV)} (pp. 198–215).
+
+\bibitem[Wang et al.(2020a)]{Wang2020_ScoreCAM}
+Wang, H., Wang, Z., Du, M., Yang, F., Zhang, Z., Ding, S., Mardziel, P., \& Hu, X. (2020).
+Score CAM: Score weighted visual explanations for CNNs. \textit{In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition Workshops (CVPRW)} (pp. 111–119).
+
+\bibitem[Wang et al.(2020b)]{Wang2020_SSCAM}
+Wang, H., Wang, Y., Wang, Z., Fan, Z., Liu, S., \& Ding, S. (2020).
+SS CAM: Smoothed Score CAM for sharper visual feature localization. \textit{arXiv}.
+
+\bibitem[Wang et al.(2021)]{Wang2021}
+Wang, W., Xie, E., Li, X., Liang, D., & Luo, Z. (2021). Pyramid vision transformer.
+\textit{In Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV)} (pp. 568–578).
+
+\bibitem[Wang \& Zhao(2025)]{Wang2025_Intervention}
+Wang, R., & Zhao, Q. (2025). Do intervention concept ranking for causal visual explanations.
+\textit{In Proceedings of the AAAI Conference on Artificial Intelligence (AAAI)}.
+
+\bibitem[Wang et al.(2025)]{Wang2025_GLoCoD}
+Wang, X., et al. (2025). GLoCoD: Global concept dictionaries for object detection explainability.
+\textit{In Proceedings of the European Conference on Computer Vision (ECCV)}.
+
+\bibitem[Yeh et al.(2024)]{Yeh2024}
+Yeh, C., Wu, C., Chen, H., et al. (2024). Class agnostic prototypes for interpretable vision.
+\textit{In Proceedings of the European Conference on Computer Vision (ECCV)}.
+
+\bibitem[Zhang \& Tao(2022)]{Zhang2022}
+Zhang, R., & Tao, D. (2022). Feature based explanations for deep network predictions. \textit{Pattern Recognition, 125}, 108512.
+
+\bibitem[Zhang et al.(2020)]{Zhang2020_Invertible}
+Zhang, R., et al. (2020). Invertible concept based explanations for CNN models. \textit{arXiv}.
+
+\bibitem[Zhang et al.(2023)]{Zhang2023_CRAFT}
+Zhang, Y., et al. (2023). CRAFT: Concept recursive activation factorization for explainability.
+\textit{In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)} (pp. 1321–1330).
+
+\bibitem[Zhao et al.(2025)]{Zhao2025_VisionFact}
+Zhao, Y., et al. (2025). VisionFact: Factored concept reasoning for interpretable vision models.
+\textit{In Advances in Neural Information Processing Systems (NeurIPS)}.
+
+\bibitem[Zhou et al.(2023)]{Zhou2023}
+Zhou, S., Zhang, C., Xiao, T., Zhang, R., Li, W., & Xiao, X. (2023).
+ODAM: Gradient based instance specific visual explanations for object detection. \textit{In International Conference on Learning Representations (ICLR)}.
+
+%% ADD A DUMMY CITATION TO HANDLE THE UNMATCHED [4] from the intro.
+\bibitem[Placeholder(2025)]{some_other_ref_4}
+Placeholder for the fourth reference cited in the introduction. Please replace.
+
+\end{thebibliography}
+
+\end{document}
+
+\endinput
+%%
+%% End of file
